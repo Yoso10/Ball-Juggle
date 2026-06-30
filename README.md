@@ -2,16 +2,15 @@
 
 Which one of you and your friends is a better juggler?? Test it!
 
-Try out our interactive 3D Juggling Tracker:  program utilizing OpenCV, dynamic floor mapping, and multi-camera analysis to detect and count juggling throws in real-time.
-
-Try out our interactive 3D Juggling Tracker Program: A real-time computer-vision system that automatically detects, tracks, and counts soccer-ball juggles ("V-Flip") from a live **dual-camera** feed. 
+Try out our interactive 3D Juggling Tracker Program: A real-time computer-vision system that automatically detects, tracks, and counts soccer-ball juggles ("V-Flip") from a live dual-camera feed. 
 The system
 gives immediate on-screen feedback, detects drops to the floor, and supports
 two-player gameplay — all built entirely on **classical image-processing** techniques
 (no deep learning at runtime, no GPU required).
 
-> Course: *Introduction to Image Processing* — CV course final project 
-> Team: Yosef Shalev · Eylon Oren · Itamar Bahat · Bar Megidish
+> Course: *Introduction to Image Processing* — CV course final project
+
+>Team: Yosef Shalev · Eylon Oren · Itamar Bahat · Bar Megidish
 
 ---
 
