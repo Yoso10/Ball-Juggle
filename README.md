@@ -1,37 +1,39 @@
-# Real-Time Juggling Counter
+﻿# Real-Time Juggling Counter
 
 Which one of you and your friends is a better juggler?? Test it!
 
-Try out our interactive 3D Juggling Tracker:  program utilizing OpenCV, dynamic floor mapping, and multi-camera analysis to detect and count juggling throws in real-time.
 
-Try out our interactive 3D Juggling Tracker Program: A real-time computer-vision system that automatically detects, tracks, and counts soccer-ball juggles ("V-Flip") from a live **dual-camera** feed. 
+Try out our interactive 3D Juggling Tracker Program: A real-time computer-vision system that automatically detects, tracks, and counts soccer-ball juggles ("V-Flip") from a live dual-camera feed. 
 The system
 gives immediate on-screen feedback, detects drops to the floor, and supports
 two-player gameplay — all built entirely on **classical image-processing** techniques
 (no deep learning at runtime, no GPU required).
 
 > Course: *Introduction to Image Processing* — CV course final project 
+
 > Team: Yosef Shalev · Eylon Oren · Itamar Bahat · Bar Megidish
 
 ---
 
 ## Table of Contents
 - [Overview](#overview)
+- [Architecture](#architecture)
 - [How It Works (Pipeline)](#how-it-works-pipeline)
-- [Calibration](#calibration)
+- [Camera Setup](#camera-setup)
+- [Configuration](#configuration)
+- [Calibration Workflow](#calibration-workflow)
   - [0. HSV Color Calibration](#0-hsv-color-calibration-ball)
-  - [1. Background (MOG2)](#1-background-mog2--key-b)
-  - [2. Ball Radius](#2-ball-radius--key-s)
-  - [3. Floor (12-point homography)](#3-floor-calibration--12-point-homography--key-f)
-  - [4. Floor-line fine-tuning](#4-floor-line-fine-tuning)
-  - [5. Header height (optional)](#5-header-height-optional--key-h)
-- [Installation](#installation)
+  - [1. Floor (12-point homography)](#3-floor-calibration--12-point-homography--key-f)
+  - [2. Background (MOG2)](#1-background-mog2--key-b)
+  - [3. Ball Radius](#2-ball-radius--key-s)
+  - [4. Header height (optional)](#5-header-height-optional--key-h)
+  - [Floor Epsilon](#floor-epsilon)
+- [Controls](#controls)
 - [Running the System](#running-the-system)
-- [Keyboard Controls](#keyboard-controls)
 - [Configuration Files](#configuration-files)
-- [Evaluation](#evaluation)
 - [Project Structure](#project-structure)
 - [Assumptions](#assumptions)
+- [Notes](#notes)
 
 ---
 
@@ -53,12 +55,35 @@ Two cameras are used:
 
 | Camera | Role | View |
 |--------|------|------|
-| **Side** (Master) | Primary tracking & counting | Side-angled, facing the floor area |
-| **Top** (Slave)   | Floor agreement & optional headers | Front-facing, straight at the player |
+| **Main** (Front) | Primary tracking & counting | Front-facing, straight at the player |
+| **Side** (Side)   | Floor agreement & optional headers | Side-angled, facing the floor area |
 
 The main camera runs **strict** detection (Hough only). The side camera runs
 **relaxed** detection (Hough with a contour fallback) but only when the side camera
 already sees the ball — this suppresses false positives while keeping recall high.
+
+
+Key features:
+
+- Dual-camera ball tracking with `main` and `side` views.
+- Dynamic floor calibration from a configurable grid.
+- Optional `header` camera for high-trajectory validation.
+- Live `pygame` dashboard with score, state, and calibration feedback.
+- Runtime mode toggle for color-only detection.
+
+---
+
+## Architecture
+
+The runtime is split into three layers:
+
+- `main.py`: orchestrates camera capture, game logic, calibration, and input.
+- `Src/`: performs ball detection, motion analysis, and floor homography.
+- `UI/dashboard.py`: renders the interface, overlays, and handles key events.
+
+The system uses `DualCameraManager` for synchronized frame capture and
+`BallProcessor` for per-camera detection. `JugglingCounter` applies motion logic
+and drop rules, while `FloorFinder` computes and applies the floor homography.
 
 ---
 
@@ -117,37 +142,105 @@ Each frame from both cameras passes through the same stages before a **HIT** or
 
 ---
 
-## Calibration
+## Camera Setup
 
-Calibration is the heart of the system. Run the steps below **once** at the start
-of each session (or whenever lighting / camera position changes). Most steps are
-triggered by a single keystroke in the running app; HSV color calibration is a
-separate helper script.
+### Camera Roles
+
+- **Main Camera (`main_source`)** — Side A / primary tracker.
+  - Captures the player, floor, and upper airspace.
+  - Used for main ball trajectory and scoring.
+
+- **Side Camera (`side_source`)** — Side B / secondary tracker.
+  - Mounted at roughly 90° to the main camera.
+  - Provides floor agreement and redundancy.
+
+- **Header Camera (`header_source`)** — optional.
+  - Mounted high and angled downward.
+  - Used for optional header-height calibration and high-trajectory checks.
+
+> `top_source` is kept for backward compatibility, but `main_source` is the
+> current primary front-facing camera source.
+
+### Recommended placement
+
+- Place the main camera directly in front of the juggler.
+- Place the side camera roughly perpendicular to the main view.
+- Use the header camera only when you want dedicated head-height support.
+
+---
+
+## Configuration
+
+The primary static configuration is in `config.py`. preferable configuration can be achived via this file.
+
+### Camera settings
+
+```python
+"camera": {
+    "main_source": 0,
+    "top_source": 1,
+    "side_source": 2,
+    "header_source": None,
+    "width": 640,
+    "height": 360
+},
+```
+
+- `main_source`, `side_source`, `header_source`: webcam index or video path.
+- `width`, `height`: processing resolution.
+- `header_source` is optional.
+
+### Dynamic floor calibration settings
+
+```python
+"calibration": {
+    "grid_width_cm": 200.0,
+    "grid_length_cm": 150.0,
+    "grid_width_intervals": 3,
+    "grid_length_intervals": 2
+},
+```
+
+- The floor grid is generated dynamically from these values.
+- The number of calibration points is `(grid_width_intervals + 1) × (grid_length_intervals + 1)`.
+- With the defaults, this produces a `4 × 3 = 12` point grid.
+
+### Runtime config files
+
+Persistent output files are saved into `Configs/`.
+
+- `Configs/ball_config.json`: HSV profiles for `main`, `side`, and `header`.
+- `Configs/floor_calibration.json`: floor homography world points and camera correspondences.
+- `Configs/runtime_config.json`: runtime settings such as `floor_epsilon_cm`.
+
+---
+
+## Calibration Workflow
+
+Calibration should be performed once at the start of each session (or whenever lighting / camera position changes).
 
 > **Note:** During calibration, MOG2 motion detection is temporarily bypassed so
 > detection runs on **pure HSV color** — this lets a stationary ball be detected
 > while it sits still on the floor or head.
 
 ### 0. HSV Color Calibration (ball)
-Run **once** with the standalone helper `Calibration Helper script.py`. It opens a
-GUI with six sliders (Lower/Upper × Hue/Sat/Val) and a live feed beside its binary
-mask. Adjust until the ball is pure **white** and the background is fully **black**,
-then press **ESC** to save. Results are written to `ball_config.json` under a
-separate profile per camera (`side`, `top`).
 
-### 1. Background (MOG2) — key **`B`**
-Step out of frame and press **`B`** to reset and rebuild the MOG2 background model
-from the current scene.
+Open the HSV modal and adjust bounds until the ball is solid white on a black
+mask. Save the profile for the current camera. Results are written to `ball_config.json` under a
+separate profile per camera (`side`, `main`).
 
-### 2. Ball Radius — key **`S`**
-Place the ball on the floor and press **`S`**. The system captures 15 pure-HSV
-frames, takes the **median** detected radius as the baseline, and configures the
-radius gate to ±50% around it. (Median, not mean — robust to outlier frames.)
+### 1. Dynamic Floor Mapping — 12-point homography — key **`F`**
 
-### 3. Floor Calibration — 12-point homography — key **`F`**
 This is the most critical calibration step. Press **`F`** and place the ball at
-**12 marked positions** forming a 4×3 grid on the real floor. Press **SPACE** at
-each position (or **ESC** to cancel). The world coordinates are:
+**12 marked positions** forming a 4×3 grid on the real floor. 
+
+press:
+
+- `SPACE` to capture the current point.
+- `BACKSPACE` to undo the last point.
+- `ESC` to abort.
+
+The world coordinates can be for example:
 
 ```
 X ∈ {0, 33, 67, 100} cm   (left → right)
@@ -159,22 +252,66 @@ all 12 points, two homography matrices (one per camera) are computed via RANSAC 
 saved to `floor_calibration.json`. From then on, a drop is confirmed when both
 cameras' world-plane projections of the ball agree within `floor_epsilon_cm`.
 
-### 4. Floor-line fine-tuning
-After automatic calibration the floor line can be nudged live:
-- **`A` / `Z`** — raise / lower the **left** anchor
-- **`UP` / `DOWN`** (or **`K` / `M`**) — raise / lower the **right** anchor
-- **`[` / `]`** — move the **left** boundary
-- **`'` / `\`** — move the **right** boundary
-- **`-` / `+`** — decrease / increase floor epsilon by 0.5 cm (saved to `runtime_config.json`)
+The grid points are generated from `config.py`, not hardcoded. The defaults
+produce 12 points, but the exact count depends on `grid_width_intervals` and
+`grid_length_intervals`.
 
-### 5. Header height (optional) — key **`H`**
-Hold the ball on the player's head and press **`H`** to capture a separate radius
-baseline for the **top** camera, enabling head-juggle ("header") detection via
-relative size change.
+### 2. Background (MOG2) — key **`B`**
+Step out of frame and press **`B`** to reset and rebuild the MOG2 background model
+from the current scene.
+
+### 3. Ball Radius — key **`S`**
+Place the ball on the floor and press **`S`**. The system captures 15 pure-HSV
+frames, takes the **median** detected radius as the baseline, and configures the
+radius gate to ±50% around it. (Median, not mean — robust to outlier frames.)
+
+### 4. Header height (optional) — key **`H`**
+If a header camera is connected, hold the ball on the player's head and press **`H`** to capture a separate radius baseline for the **top** camera, enabling head-juggle ("header") detection via relative size change.
+
 
 ---
 
-## Installation
+## Floor Epsilon
+
+`floor_epsilon_cm` controls how closely the two camera projections must agree
+before floor contact is confirmed.
+
+- Higher epsilon makes drop detection more forgiving.
+- Lower epsilon makes floor contact stricter.
+
+Adjust live with:
+
+- `-` / keypad `-` → decrease by `0.5 cm`
+- `=` / `+` / keypad `+` → increase by `0.5 cm`
+
+The dashboard also includes an `EPSILON` pane for slider tuning.
+
+---
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| `T` | Start match with 3-second countdown |
+| `N` | Switch player and save score |
+| `R` | Reset live session |
+| `D` | Toggle color-only detection |
+| `V` | Toggle black/white detection mask view |
+| `G` | Toggle floor grid overlay |
+| `ESC` | Exit program |
+| `1` | Open HSV calibration modal |
+| `B` | Reset MOG2 background |
+| `S` | Calibrate ball radius |
+| `H` | Calibrate optional header camera |
+| `F` | Start floor calibration |
+| `C` | Clear evaluation log |
+| `-` / `+` | Adjust floor epsilon by `0.5 cm` |
+
+---
+
+## Running the System
+
+### Install dependencies
 
 Requires **Python 3.9+** and two connected cameras (USB webcams or video files).
 
@@ -190,104 +327,55 @@ Dependencies: `opencv-python`, `numpy`, `pygame` (for the drop whistle sound).
 
 ---
 
-## Running the System
+### Configure the cameras
 
-1. **Configure camera sources** in `config.py` → `CONFIG["camera"]`:
-   - `top_source` and `side_source` — webcam indices (e.g. `0`, `1`) or paths to
+Edit `config.py` and set the sources and resolution under `CONFIG["camera"]`.
+
+ **Configure camera sources** in `config.py` → `CONFIG["camera"]`:
+   - `main_source` and `side_source` — webcam indices (e.g. `0`, `1`) or paths to
      video files (a string path enables looping playback for testing).
    - `width` / `height` — processing resolution (default 640×360).
 
-2. **Run the HSV helper once** to set the ball color (see [step 0](#0-hsv-color-calibration-ball)).
 
-3. **Launch the main app:**
-   ```bash
-   python main.py
-   ```
+### Launch
 
-4. **Calibrate** in order: `B` → `S` → `F` → (fine-tune) → optionally `H`.
+```bash
+python main.py
+```
 
-5. Press **`T`** to start a 3-second countdown and begin a counted game.
+### Calibrate
 
----
+Recommended order:
 
-## Keyboard Controls
+1. `1` — HSV calibration
+2. `B` — background capture
+3. `S` — radius calibration
+4. `F` — floor calibration
+5. `H` — optional header calibration
 
-| Key | Action |
-|-----|--------|
-| `B` | Re-capture background (reset MOG2) |
-| `S` | Calibrate ball radius (15-frame median) |
-| `F` | Floor calibration (12-point homography) |
-| `H` | Calibrate header height (top camera) |
-| `T` | Start 3-second countdown & play |
-| `N` | Switch player (saves score; shows winner after both play) |
-| `R` | Reset score / counter |
-| `D` | Toggle color-only detection (MOG2 bypass) |
-| `G` | Toggle floor-grid overlay |
-| `C` | Clear evaluation log |
-| `A`/`Z`, `UP`/`DOWN`, `K`/`M`, `[`/`]`, `'`/`\`, `-`/`+` | Floor adjustment (see above) |
-| `ESC` | Exit |
-
+Press **`T`** to start a 3-second countdown and begin a counted game.
 ---
 
 ## Configuration Files
 
 | File | Purpose |
 |------|---------|
-| `config.py` | Static configuration (kernels, thresholds, camera sources, logic params) |
-| `ball_config.json` | Saved HSV color bounds per camera profile (`side`, `top`) |
-| `floor_calibration.json` | 12 world points + per-camera pixel points for homography |
-| `runtime_config.json` | Runtime-tunable params persisted live (e.g. `floor_epsilon_cm`) |
-| `evaluation_log.csv` | Game-result log: score, drops, mask quality, clean-play % |
-
----
-
-## Evaluation
-
-The classical pipeline was benchmarked against **SAM 3** (Segment Anything Model 3)
-masks used as ground truth on 12 diverse frames. The raw HSV mask achieves a mean
-**DICE of 0.953** and **IoU of 0.912** — accuracy approaching a deep-learning model
-while running at real-time speed on CPU. The Hough-circle localization is
-geometrically approximate (DICE 0.797) but achieves a 100% detection rate and
-provides the center-and-radius representation the game logic needs.
-
-| Metric | Raw HSV Mask | Hough Circle |
-|--------|--------------|--------------|
-| DICE | 0.953 ± 0.011 | 0.797 ± 0.085 |
-| IoU | 0.912 ± 0.021 | 0.665 ± 0.112 |
-| Precision | 0.955 ± 0.030 | 0.756 ± 0.176 |
-| Recall | 0.953 ± 0.025 | 0.878 ± 0.093 |
-| F1 | 0.953 ± 0.011 | 0.797 ± 0.085 |
-
-**Evaluation tooling:**
-- `capture_eval_frames.py` — capture a frame set for evaluation.
-- `generate_ground_truth.py` — produce/organize ground-truth masks.
-- `run_pipeline.py` — run the detection pipeline over the evaluation frame set.
-- `evaluate_segmentation.py` — compute DICE / IoU / Precision / Recall vs. ground truth.
+| `config.py` | Static defaults for cameras, processing, detection, and logic |
+| `Configs/ball_config.json` | Saved HSV bounds for camera profiles |
+| `Configs/floor_calibration.json` | Floor homography calibration data |
+| `Configs/runtime_config.json` | Live runtime settings |
+| `evaluation/` | Benchmark frames, ground truth, and analysis scripts |
 
 ---
 
 ## Project Structure
 
-```
-main.py                     # Main loop: dual-camera read, UI, keyboard input, calibration orchestration
-camera_manager.py           # Threaded dual-camera capture (non-blocking I/O)
-ball_processor.py           # Per-camera detection pipeline (blur→MOG2→HSV→fusion→morph→Hough→Kalman)
-juggling_logic.py           # Game logic: V-flip kick counting, drop detection, scoring
-floor_finding.py            # Homography-based floor / ground-plane agreement
-config.py                   # Static configuration
-Utils\config_utils.py             # Load/save HSV, floor points, runtime config
-Calibration Helper script.py# Standalone HSV color-calibration GUI
-ball_config.json            # Saved HSV bounds (per camera)
-floor_calibration.json      # Saved floor calibration points
-runtime_config.json         # Live-tunable runtime params
-
-# Evaluation
-capture_eval_frames.py      # Capture frames for benchmarking
-generate_ground_truth.py    # Build ground-truth masks
-run_pipeline.py             # Run pipeline over eval frames
-evaluate_segmentation.py    # Compute segmentation metrics
-evaluation/                 # Frames, ground truth, and pipeline outputs
-```
+- `main.py` — runtime orchestration and input handling.
+- `Src/` — detection, logic, and floor estimation.
+- `UI/dashboard.py` — pygame dashboard and UX.
+- `Utils/config_utils.py` — saved config loading and dynamic floor-point generation.
+- `Configs/` — persistent HSV, floor, and runtime files.
+- `evaluation/` — evaluation tooling and datasets.
 
 ---
 
@@ -303,3 +391,21 @@ evaluation/                 # Frames, ground truth, and pipeline outputs
 - **Kinematic mimicry** — human juggling follows a predictable velocity-reversal
   pattern, allowing kicks to be counted via V-flips instead of expensive collision
   modeling.
+---
+
+## Notes
+
+- The current code supports `main`, `side`, and optional `header` camera roles.
+- Floor calibration is dynamically generated from `config.py` values.
+- `main_source`, `side_source`, and `header_source` accept webcam indices or video paths.
+
+
+## Project Team
+
+* **Yosef Shalev** - [LinkedIn](https://www.linkedin.com/in/yossi-shalev/)
+* **Bar Megidish** - [LinkedIn](https://www.linkedin.com/in/bar-megidish-190269214/)
+* **Eylon Oren** - [LinkedIn](https://www.linkedin.com/in/eylon-oren-8976a2313/)
+* **Itamar Bahat** - [LinkedIn](https://www.linkedin.com/in/itamar-bahat-997291228/)
+
+
+
