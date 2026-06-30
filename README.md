@@ -32,6 +32,8 @@ The system gives immediate on-screen feedback, detects drops to the floor, and s
 - [Project Structure](#project-structure)
 - [Assumptions](#assumptions)
 - [Notes](#notes)
+- [Project Team](#project-team)
+
 
 ---
 
