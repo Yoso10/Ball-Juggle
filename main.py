@@ -6,13 +6,13 @@ import sys
 import json
 import threading
 import pygame
-from camera_manager import DualCameraManager
-from ball_processor import BallProcessor
-from juggling_logic import JugglingCounter
+from src.camera_manager import DualCameraManager
+from src.ball_processor import BallProcessor
+from src.juggling_logic import JugglingCounter
 from config import CONFIG
-from Utils.config_utils import load_hsv_config, save_hsv_config, load_floor_points, save_floor_points, generate_world_points, generate_point_names
-from floor_finding import FloorFinder
-from dashboard import Dashboard
+from utils.config_utils import load_hsv_config, save_hsv_config, load_floor_points, save_floor_points, generate_world_points, generate_point_names
+from src.floor_finding import FloorFinder
+from ui.dashboard import Dashboard
 
 # Path to this script's directory, so the HSV helper subprocess and configs
 # resolve correctly regardless of the working directory.
