@@ -1,0 +1,51 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Evaluation artifacts ----
+evaluation/
+
+# ---- Documents / reports ----
+Hebrew_project_report.pdf
+explenations.docx
+
+# ---- Video / media ----
+*.mp4
+*.avi
+
+# ---- Runtime / generated artifacts ----
+# Logs produced while playing/evaluating (regenerated at runtime)
+evaluation_log.csv
+
+# ---- LaTeX build artifacts ----
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# ---- Misc ----
+*.log
+*.tmp
